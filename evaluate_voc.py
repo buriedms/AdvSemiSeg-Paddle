@@ -22,23 +22,22 @@ from PIL import Image
 
 import matplotlib.pyplot as plt
 
-IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
+IMG_MEAN = np.array((104.00698793, 116.66876762, 122.67891434), dtype=np.float32)
 
 MODEL = 'DeepLab'
 DATA_DIRECTORY = './dataset/VOC2012'
 DATA_LIST_PATH = './dataset/voc_list/val.txt'
 IGNORE_LABEL = 255
 NUM_CLASSES = 21
-NUM_STEPS = 1449 # Number of images in the validation set.
+NUM_STEPS = 1449  # Number of images in the validation set.
 RESTORE_FROM = 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.125-8d75b3f1.pth'
 PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
 
-
-pretrianed_models_dict ={'semi0.125': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.125-03c6f81c.pth',
-                         'semi0.25': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.25-473f8a14.pth',
-                         'semi0.5': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.5-acf6a654.pth',
-                         'advFull': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSegVOCFull-92fbc7ee.pth'}
+pretrianed_models_dict = {'semi0.125': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.125-03c6f81c.pth',
+                          'semi0.25': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.25-473f8a14.pth',
+                          'semi0.5': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.5-acf6a654.pth',
+                          'advFull': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSegVOCFull-92fbc7ee.pth'}
 
 
 def get_arguments():
@@ -90,6 +89,7 @@ class VOCColorize(object):
 
         return color_image
 
+
 def color_map(N=256, normalized=False):
     def bitget(byteval, idx):
         return ((byteval & (1 << idx)) != 0)
@@ -100,14 +100,14 @@ def color_map(N=256, normalized=False):
         r = g = b = 0
         c = i
         for j in range(8):
-            r = r | (bitget(c, 0) << 7-j)
-            g = g | (bitget(c, 1) << 7-j)
-            b = b | (bitget(c, 2) << 7-j)
+            r = r | (bitget(c, 0) << 7 - j)
+            g = g | (bitget(c, 1) << 7 - j)
+            b = b | (bitget(c, 2) << 7 - j)
             c = c >> 3
 
         cmap[i] = np.array([r, g, b])
 
-    cmap = cmap/255 if normalized else cmap
+    cmap = cmap / 255 if normalized else cmap
     return cmap
 
 
@@ -128,15 +128,14 @@ def get_iou(data_list, class_num, save_path=None):
     aveJ, j_list, M = ConfM.jaccard()
 
     classes = np.array(('background',  # always index 0
-               'aeroplane', 'bicycle', 'bird', 'boat',
-               'bottle', 'bus', 'car', 'cat', 'chair',
-                         'cow', 'diningtable', 'dog', 'horse',
-                         'motorbike', 'person', 'pottedplant',
-                         'sheep', 'sofa', 'train', 'tvmonitor'))
+                        'aeroplane', 'bicycle', 'bird', 'boat',
+                        'bottle', 'bus', 'car', 'cat', 'chair',
+                        'cow', 'diningtable', 'dog', 'horse',
+                        'motorbike', 'person', 'pottedplant',
+                        'sheep', 'sofa', 'train', 'tvmonitor'))
 
     for i, iou in enumerate(j_list):
         print('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]))
-
 
     print('meanIOU: ' + str(aveJ) + '\n')
     if save_path:
@@ -144,6 +143,7 @@ def get_iou(data_list, class_num, save_path=None):
             for i, iou in enumerate(j_list):
                 f.write('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]) + '\n')
             f.write('meanIOU: ' + str(aveJ) + '\n')
+
 
 def show_all(gt, pred):
     import matplotlib.pyplot as plt
@@ -154,17 +154,17 @@ def show_all(gt, pred):
     ax1, ax2 = axes
 
     classes = np.array(('background',  # always index 0
-               'aeroplane', 'bicycle', 'bird', 'boat',
-               'bottle', 'bus', 'car', 'cat', 'chair',
-                         'cow', 'diningtable', 'dog', 'horse',
-                         'motorbike', 'person', 'pottedplant',
-                         'sheep', 'sofa', 'train', 'tvmonitor'))
-    colormap = [(0,0,0),(0.5,0,0),(0,0.5,0),(0.5,0.5,0),(0,0,0.5),(0.5,0,0.5),(0,0.5,0.5),
-                    (0.5,0.5,0.5),(0.25,0,0),(0.75,0,0),(0.25,0.5,0),(0.75,0.5,0),(0.25,0,0.5),
-                    (0.75,0,0.5),(0.25,0.5,0.5),(0.75,0.5,0.5),(0,0.25,0),(0.5,0.25,0),(0,0.75,0),
-                    (0.5,0.75,0),(0,0.25,0.5)]
+                        'aeroplane', 'bicycle', 'bird', 'boat',
+                        'bottle', 'bus', 'car', 'cat', 'chair',
+                        'cow', 'diningtable', 'dog', 'horse',
+                        'motorbike', 'person', 'pottedplant',
+                        'sheep', 'sofa', 'train', 'tvmonitor'))
+    colormap = [(0, 0, 0), (0.5, 0, 0), (0, 0.5, 0), (0.5, 0.5, 0), (0, 0, 0.5), (0.5, 0, 0.5), (0, 0.5, 0.5),
+                (0.5, 0.5, 0.5), (0.25, 0, 0), (0.75, 0, 0), (0.25, 0.5, 0), (0.75, 0.5, 0), (0.25, 0, 0.5),
+                (0.75, 0, 0.5), (0.25, 0.5, 0.5), (0.75, 0.5, 0.5), (0, 0.25, 0), (0.5, 0.25, 0), (0, 0.75, 0),
+                (0.5, 0.75, 0), (0, 0.25, 0.5)]
     cmap = colors.ListedColormap(colormap)
-    bounds=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
+    bounds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
     norm = colors.BoundaryNorm(bounds, cmap.N)
 
     ax1.set_title('gt')
@@ -175,6 +175,7 @@ def show_all(gt, pred):
 
     plt.show()
 
+
 def main():
     """Create the model and start the evaluation process."""
     args = get_arguments()
@@ -184,23 +185,23 @@ def main():
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
-
     model = Res_Deeplab(num_classes=args.num_classes)
 
     if args.pretrained_model != None:
         args.restore_from = pretrianed_models_dict[args.pretrained_model]
 
-    if args.restore_from[:4] == 'http' :
-        saved_state_dict = model_zoo.load_url(args.restore_from)
+    if args.restore_from[:4] == 'http':
+        saved_state_dict = model_zoo.load_url(args.restore_from, map_location='cpu')
     else:
         saved_state_dict = torch.load(args.restore_from)
     model.load_state_dict(saved_state_dict)
 
     model.eval()
-    model.cuda(gpu0)
+    # model.cuda(gpu0)
 
-    testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(505, 505), mean=IMG_MEAN, scale=False, mirror=False),
-                                    batch_size=1, shuffle=False, pin_memory=True)
+    testloader = data.DataLoader(
+        VOCDataSet(args.data_dir, args.data_list, crop_size=(505, 505), mean=IMG_MEAN, scale=False, mirror=False),
+        batch_size=1, shuffle=False, pin_memory=True)
 
     if version.parse(torch.__version__) >= version.parse('0.4.0'):
         interp = nn.Upsample(size=(505, 505), mode='bilinear', align_corners=True)
@@ -212,17 +213,21 @@ def main():
 
     for index, batch in enumerate(testloader):
         if index % 100 == 0:
-            print('%d processd'%(index))
+            print('%d processd' % (index))
+        if index == 100:
+            break
         image, label, size, name = batch
         size = size[0].numpy()
-        output = model(Variable(image, volatile=True).cuda(gpu0))
+        # output = model(Variable(image, volatile=True).cuda(gpu0))
+        # output = model(Variable(image, volatile=True))
+        output = model(image)
         output = interp(output).cpu().data[0].numpy()
 
-        output = output[:,:size[0],:size[1]]
-        gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
+        output = output[:, :size[0], :size[1]]
+        gt = np.asarray(label[0].numpy()[:size[0], :size[1]], dtype=np.int64)
 
-        output = output.transpose(1,2,0)
-        output = np.asarray(np.argmax(output, axis=2), dtype=np.int)
+        output = output.transpose(1, 2, 0)
+        output = np.asarray(np.argmax(output, axis=2), dtype=np.int64)
 
         filename = os.path.join(args.save_dir, '{}.png'.format(name[0]))
         color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')

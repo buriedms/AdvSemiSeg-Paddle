@@ -1,8 +1,10 @@
 import os, sys
 import numpy as np
 
+import argparse
+import cv2
 from multiprocessing import Pool 
-import copy_reg
+import copyreg as copy_reg
 import types
 def _pickle_method(m):
     if m.im_self is None:
@@ -35,14 +37,14 @@ class ConfusionMatrix(object):
 
     def recall(self):
         recall = 0.0
-        for i in xrange(self.nclass):
+        for i in range(self.nclass):
             recall += self.M[i, i] / np.sum(self.M[:, i])
 
         return recall/self.nclass
 
     def accuracy(self):
         accuracy = 0.0
-        for i in xrange(self.nclass):
+        for i in range(self.nclass):
             accuracy += self.M[i, i] / np.sum(self.M[i, :])
 
         return accuracy/self.nclass
@@ -50,7 +52,7 @@ class ConfusionMatrix(object):
     def jaccard(self):
         jaccard = 0.0
         jaccard_perclass = []
-        for i in xrange(self.nclass):
+        for i in range(self.nclass):
             if not self.M[i, i] == 0:
                 jaccard_perclass.append(self.M[i, i] / (np.sum(self.M[i, :]) + np.sum(self.M[:, i]) - self.M[i, i]))
 
@@ -67,7 +69,7 @@ class ConfusionMatrix(object):
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args = argparse.ArgumentParser().parse_args()
 
     m_list = []
     data_list = []
