@@ -1,15 +1,23 @@
 import argparse
 import cv2
-import torch
-import torch.nn as nn
-from torch.utils import data, model_zoo
 import numpy as np
 import pickle
-from torch.autograd import Variable
-import torch.optim as optim
-import torch.nn.functional as F
+
+# import torch
+# import torch.nn as nn
+# from torch.utils import data, model_zoo
+# from torch.autograd import Variable
+# import torch.optim as optim
+# import torch.nn.functional as F
+# import torch.backends.cudnn as cudnn
+
+import paddle
+import paddle.nn as nn
+import paddle.optimizer as optim
+import paddle.nn.functional as F
+from paddle.io import DataLoader
+
 import scipy.misc
-import torch.backends.cudnn as cudnn
 import sys
 import os
 import os.path as osp
@@ -44,7 +52,7 @@ NUM_CLASSES = 21
 NUM_STEPS = 20000
 POWER = 0.9
 RANDOM_SEED = 1234
-RESTORE_FROM = 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/resnet101COCO-41f33a49.pth'
+RESTORE_FROM = 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/resnet101COCO-41f33a49.pdparams'
 SAVE_NUM_IMAGES = 2
 SAVE_PRED_EVERY = 5000
 SNAPSHOT_DIR = './snapshots/'
@@ -151,8 +159,10 @@ def loss_calc(pred, label, gpu):
     """
     # out shape batch_size x channels x h x w -> batch_size x channels x h x w
     # label shape h x w x 1 x batch_size  -> batch_size x 1 x h x w
-    label = Variable(label.long()).cuda(gpu)
-    criterion = CrossEntropy2d().cuda(gpu)
+    # label = Variable(label.long()).cuda(gpu)
+    # criterion = CrossEntropy2d().cuda(gpu)
+    label = label.long()
+    criterion = CrossEntropy2d()
 
     return criterion(pred, label)
 
@@ -179,33 +189,30 @@ def one_hot(label):
     for i in range(args.num_classes):
         one_hot[:,i,...] = (label==i)
     #handle ignore labels
-    return torch.FloatTensor(one_hot)
+    return paddle.to_tensor(one_hot,dtype=paddle.float32)
 
 def make_D_label(label, ignore_mask):
     ignore_mask = np.expand_dims(ignore_mask, axis=1)
     D_label = np.ones(ignore_mask.shape)*label
     D_label[ignore_mask] = 255
-    D_label = Variable(torch.FloatTensor(D_label)).cuda(args.gpu)
+    # D_label = Variable(torch.FloatTensor(D_label)).cuda(args.gpu)
+    D_label = paddle.to_tensor(D_label,dtype=paddle.float32)
 
     return D_label
-
 
 def main():
 
     h, w = map(int, args.input_size.split(','))
     input_size = (h, w)
 
-    cudnn.enabled = True
+    # cudnn.enabled = True
     gpu = args.gpu
 
     # create network
     model = Res_Deeplab(num_classes=args.num_classes)
 
     # load pretrained parameters
-    if args.restore_from[:4] == 'http' :
-        saved_state_dict = model_zoo.load_url(args.restore_from)
-    else:
-        saved_state_dict = torch.load(args.restore_from)
+    saved_state_dict = paddle.load(args.restore_from)
 
     # only copy the params that exist in current model (caffe-like)
     new_params = model.state_dict().copy()
@@ -218,16 +225,16 @@ def main():
 
 
     model.train()
-    model.cuda(args.gpu)
 
-    cudnn.benchmark = True
+    # model.cuda(args.gpu)
+    # cudnn.benchmark = True
 
     # init D
     model_D = FCDiscriminator(num_classes=args.num_classes)
     if args.restore_from_D is not None:
-        model_D.load_state_dict(torch.load(args.restore_from_D))
+        model_D.load_state_dict(paddle.load(args.restore_from_D))
     model_D.train()
-    model_D.cuda(args.gpu)
+    # model_D.cuda(args.gpu)
 
 
     if not os.path.exists(args.snapshot_dir):
@@ -243,11 +250,11 @@ def main():
                        scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
 
     if args.partial_data is None:
-        trainloader = data.DataLoader(train_dataset,
-                        batch_size=args.batch_size, shuffle=True, num_workers=5, pin_memory=True)
+        trainloader = DataLoader(train_dataset,
+                        batch_size=args.batch_size, shuffle=True, num_workers=5)
 
-        trainloader_gt = data.DataLoader(train_gt_dataset,
-                        batch_size=args.batch_size, shuffle=True, num_workers=5, pin_memory=True)
+        trainloader_gt = DataLoader(train_gt_dataset,
+                        batch_size=args.batch_size, shuffle=True, num_workers=5)
     else:
         #sample partial data
         partial_size = int(args.partial_data * train_dataset_size)
@@ -261,16 +268,19 @@ def main():
 
         pickle.dump(train_ids, open(osp.join(args.snapshot_dir, 'train_id.pkl'), 'wb'))
 
-        train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
-        train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:])
-        train_gt_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
+        # train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
+        # train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:])
+        # train_gt_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
+        train_sampler = paddle.io.BatchSampler(train_ids[:partial_size],shuffle=True)
+        train_remain_sampler = paddle.io.BatchSampler(train_ids[partial_size:],shuffle=True)
+        train_gt_sampler = paddle.io.BatchSampler(train_ids[:partial_size],shuffle=True)
 
-        trainloader = data.DataLoader(train_dataset,
-                        batch_size=args.batch_size, sampler=train_sampler, num_workers=3, pin_memory=True)
-        trainloader_remain = data.DataLoader(train_dataset,
-                        batch_size=args.batch_size, sampler=train_remain_sampler, num_workers=3, pin_memory=True)
-        trainloader_gt = data.DataLoader(train_gt_dataset,
-                        batch_size=args.batch_size, sampler=train_gt_sampler, num_workers=3, pin_memory=True)
+        trainloader = DataLoader(train_dataset,
+                        batch_size=args.batch_size, batch_sampler=train_sampler, num_workers=3)
+        trainloader_remain = DataLoader(train_dataset,
+                        batch_size=args.batch_size, batch_sampler=train_remain_sampler, num_workers=3)
+        trainloader_gt = DataLoader(train_gt_dataset,
+                        batch_size=args.batch_size, batch_sampler=train_gt_sampler, num_workers=3)
 
         trainloader_remain_iter = enumerate(trainloader_remain)
 
@@ -282,22 +292,19 @@ def main():
     # implement model.optim_parameters(args) to handle different models' lr setting
 
     # optimizer for segmentation network
-    optimizer = optim.SGD(model.optim_parameters(args),
-                lr=args.learning_rate, momentum=args.momentum,weight_decay=args.weight_decay)
-    optimizer.zero_grad()
+    optimizer = optim.Momentum(learning_rate=args.learning_rate,parameters=model.optim_parameters(args), momentum=args.momentum,weight_decay=args.weight_decay)
+    optimizer. clear_grad()
 
     # optimizer for discriminator network
-    optimizer_D = optim.Adam(model_D.parameters(), lr=args.learning_rate_D, betas=(0.9,0.99))
-    optimizer_D.zero_grad()
+    optimizer_D = optim.Adam(learning_rate=args.learning_rate_D,parameters=model_D.parameters(), beta1=0.9,beta2=0.99)
+    optimizer_D. clear_grad()
 
     # loss/ bilinear upsampling
     bce_loss = BCEWithLogitsLoss2d()
     interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear')
 
-    if version.parse(torch.__version__) >= version.parse('0.4.0'):
-        interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear', align_corners=True)
-    else:
-        interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear')
+
+    interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear', align_corners=True)
 
 
     # labels for adversarial training
@@ -313,9 +320,9 @@ def main():
         loss_semi_value = 0
         loss_semi_adv_value = 0
 
-        optimizer.zero_grad()
+        optimizer. clear_grad()
         adjust_learning_rate(optimizer, i_iter)
-        optimizer_D.zero_grad()
+        optimizer_D. clear_grad()
         adjust_learning_rate_D(optimizer_D, i_iter)
 
         for sub_i in range(args.iter_size):
@@ -336,7 +343,7 @@ def main():
 
                 # only access to img
                 images, _, _, _ = batch
-                images = Variable(images).cuda(args.gpu)
+                # images = Variable(images).cuda(args.gpu)
 
 
                 pred = interp(model(images))
@@ -369,7 +376,7 @@ def main():
                     if semi_ratio == 0.0:
                         loss_semi_value += 0
                     else:
-                        semi_gt = torch.FloatTensor(semi_gt)
+                        semi_gt = paddle.to_tensor(semi_gt,dtype=paddle.float32)
 
                         loss_semi = args.lambda_semi * loss_calc(pred, semi_gt, args.gpu)
                         loss_semi = loss_semi/args.iter_size
@@ -390,7 +397,7 @@ def main():
                 _, batch = trainloader_iter.next()
 
             images, labels, _, _ = batch
-            images = Variable(images).cuda(args.gpu)
+            # images = Variable(images).cuda(args.gpu)
             ignore_mask = (labels.numpy() == 255)
             pred = interp(model(images))
 
@@ -419,7 +426,7 @@ def main():
             pred = pred.detach()
 
             if args.D_remain:
-                pred = torch.cat((pred, pred_remain), 0)
+                pred = paddle.concat((pred, pred_remain), 0)
                 ignore_mask = np.concatenate((ignore_mask,ignore_mask_remain), axis = 0)
 
             D_out = interp(model_D(F.softmax(pred)))
@@ -438,7 +445,8 @@ def main():
                 _, batch = trainloader_gt_iter.next()
 
             _, labels_gt, _, _ = batch
-            D_gt_v = Variable(one_hot(labels_gt)).cuda(args.gpu)
+            # D_gt_v = Variable(one_hot(labels_gt)).cuda(args.gpu)
+            D_gt_v = one_hot(labels_gt)
             ignore_mask_gt = (labels_gt.numpy() == 255)
 
             D_out = interp(model_D(D_gt_v))
@@ -457,14 +465,14 @@ def main():
 
         if i_iter >= args.num_steps-1:
             print ('save model ...')
-            torch.save(model.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(args.num_steps)+'.pth'))
-            torch.save(model_D.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(args.num_steps)+'_D.pth'))
+            paddle.save(model.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(args.num_steps)+'.pdparams'))
+            paddle.save(model_D.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(args.num_steps)+'_D.pdparams'))
             break
 
         if i_iter % args.save_pred_every == 0 and i_iter!=0:
             print ('taking snapshot ...')
-            torch.save(model.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(i_iter)+'.pth'))
-            torch.save(model_D.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(i_iter)+'_D.pth'))
+            paddle.save(model.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(i_iter)+'.pdparams'))
+            paddle.save(model_D.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(i_iter)+'_D.pdparams'))
 
     end = timeit.default_timer()
     print (end-start,'seconds')

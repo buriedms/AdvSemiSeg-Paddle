@@ -1,13 +1,11 @@
-import torch
-import torch.nn.functional as F
-import torch.nn as nn
-from torch.autograd import Variable
+import paddle
+import paddle.nn as nn
+import paddle.nn.functional as F
 
-class CrossEntropy2d(nn.Module):
+class CrossEntropy2d(nn.Layer):
 
-    def __init__(self, size_average=True, ignore_label=255):
+    def __init__(self, ignore_label=255):
         super(CrossEntropy2d, self).__init__()
-        self.size_average = size_average
         self.ignore_label = ignore_label
 
     def forward(self, predict, target, weight=None):
@@ -28,14 +26,14 @@ class CrossEntropy2d(nn.Module):
         target_mask = (target >= 0) * (target != self.ignore_label)
         target = target[target_mask]
         if not target.data.dim():
-            return Variable(torch.zeros(1))
+            return paddle.zeros(1)
         predict = predict.transpose(1, 2).transpose(2, 3).contiguous()
         predict = predict[target_mask.view(n, h, w, 1).repeat(1, 1, 1, c)].view(-1, c)
-        loss = F.cross_entropy(predict, target, weight=weight, size_average=self.size_average)
+        loss = F.cross_entropy(predict, target, weight=weight) # todo modified delete size_averge
         return loss
 
 
-class BCEWithLogitsLoss2d(nn.Module):
+class BCEWithLogitsLoss2d(nn.Layer):
 
     def __init__(self, size_average=True, ignore_label=255):
         super(BCEWithLogitsLoss2d, self).__init__()
@@ -60,7 +58,7 @@ class BCEWithLogitsLoss2d(nn.Module):
         target_mask = (target >= 0) * (target != self.ignore_label)
         target = target[target_mask]
         if not target.data.dim():
-            return Variable(torch.zeros(1))
+            return paddle.zeros(1)
         predict = predict[target_mask]
-        loss = F.binary_cross_entropy_with_logits(predict, target, weight=weight, size_average=self.size_average)
+        loss = F.binary_cross_entropy_with_logits(predict, target, weight=weight)
         return loss

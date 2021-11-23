@@ -8,12 +8,9 @@ from collections import OrderedDict
 import os
 from packaging import version
 
-import torch
-import torch.nn as nn
-from torch.autograd import Variable
-import torchvision.models as models
-import torch.nn.functional as F
-from torch.utils import data, model_zoo
+import paddle
+import paddle.nn as nn
+from paddle.io import DataLoader
 
 from model.deeplab import Res_Deeplab
 from dataset.voc_dataset import VOCDataSet
@@ -21,6 +18,8 @@ from dataset.voc_dataset import VOCDataSet
 from PIL import Image
 
 import matplotlib.pyplot as plt
+from matplotlib import colors
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 IMG_MEAN = np.array((104.00698793, 116.66876762, 122.67891434), dtype=np.float32)
 
@@ -71,7 +70,7 @@ def get_arguments():
 class VOCColorize(object):
     def __init__(self, n=22):
         self.cmap = color_map(22)
-        self.cmap = torch.from_numpy(self.cmap[:n])
+        self.cmap = paddle.to_tensor(self.cmap[:n])
 
     def __call__(self, gray_image):
         size = gray_image.shape
@@ -146,10 +145,6 @@ def get_iou(data_list, class_num, save_path=None):
 
 
 def show_all(gt, pred):
-    import matplotlib.pyplot as plt
-    from matplotlib import colors
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
-
     fig, axes = plt.subplots(1, 2)
     ax1, ax2 = axes
 
@@ -175,7 +170,6 @@ def show_all(gt, pred):
 
     plt.show()
 
-
 def main():
     """Create the model and start the evaluation process."""
     args = get_arguments()
@@ -190,23 +184,17 @@ def main():
     if args.pretrained_model != None:
         args.restore_from = pretrianed_models_dict[args.pretrained_model]
 
-    if args.restore_from[:4] == 'http':
-        saved_state_dict = model_zoo.load_url(args.restore_from, map_location='cpu')
-    else:
-        saved_state_dict = torch.load(args.restore_from)
+    saved_state_dict = paddle.load(args.restore_from)
     model.load_state_dict(saved_state_dict)
 
     model.eval()
     # model.cuda(gpu0)
 
-    testloader = data.DataLoader(
+    testloader = DataLoader(
         VOCDataSet(args.data_dir, args.data_list, crop_size=(505, 505), mean=IMG_MEAN, scale=False, mirror=False),
-        batch_size=1, shuffle=False, pin_memory=True)
+        batch_size=1, shuffle=False)
 
-    if version.parse(torch.__version__) >= version.parse('0.4.0'):
-        interp = nn.Upsample(size=(505, 505), mode='bilinear', align_corners=True)
-    else:
-        interp = nn.Upsample(size=(505, 505), mode='bilinear')
+    interp = nn.Upsample(size=(505, 505), mode='bilinear', align_corners=True)
     data_list = []
 
     colorize = VOCColorize()
