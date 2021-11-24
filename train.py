@@ -463,6 +463,8 @@ def main():
             #     'iter = {0:8d}/{1:8d}, loss_seg = {2:.3f}, loss_adv_p = {3:.3f}, loss_D = {4:.3f}, loss_semi = {5:.3f}, loss_semi_adv = {6:.3f}'.format(
             #         i_iter, args.num_steps, loss_seg_value, loss_adv_pred_value, loss_D_value, loss_semi_value,
             #         loss_semi_adv_value))
+            time=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            logger.write(f'{time} - ')
             logger.write('iter = {0:8d}/{1:8d}, loss_seg = {2:.3f}, loss_adv_p = {3:.3f}, loss_D = {4:.3f}, loss_semi = {5:.3f}, loss_semi_adv = {6:.3f}\n'.format(
                     i_iter, args.num_steps, loss_seg_value, loss_adv_pred_value, loss_D_value, loss_semi_value,loss_semi_adv_value))
             t.set_postfix(loss_seg = f'{loss_seg_value:.3f}', loss_adv_p = f'{loss_adv_pred_value:.3f}', loss_D = f'{loss_D_value:.3f}', loss_semi = f'{loss_semi_value:.3f}', loss_semi_adv = f'{loss_semi_adv_value:.3f}')
