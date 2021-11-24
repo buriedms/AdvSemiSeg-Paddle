@@ -29,14 +29,14 @@ DATA_LIST_PATH = './dataset/voc_list/val.txt'
 IGNORE_LABEL = 255
 NUM_CLASSES = 21
 NUM_STEPS = 1449  # Number of images in the validation set.
-RESTORE_FROM = 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.125-8d75b3f1.pth'
+RESTORE_FROM = r'./pdparams/AdvSemiSegVOC0.125-8d75b3f1.pdparams'
 PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
 
-pretrianed_models_dict = {'semi0.125': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.125-03c6f81c.pth',
-                          'semi0.25': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.25-473f8a14.pth',
-                          'semi0.5': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSemiSegVOC0.5-acf6a654.pth',
-                          'advFull': 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/AdvSegVOCFull-92fbc7ee.pth'}
+pretrianed_models_dict = {'semi0.125': r'./pdparams/AdvSemiSegVOC0.125-03c6f81c.pdparams',
+                          'semi0.25': r'./pdparams/AdvSemiSegVOC0.25-473f8a14.pdparams',
+                          'semi0.5': r'./pdparams/AdvSemiSegVOC0.5-acf6a654.pdparams',
+                          'advFull': r'./pdparams/AdvSegVOCFull-92fbc7ee.pdparams'}
 
 
 def get_arguments():
@@ -70,7 +70,7 @@ def get_arguments():
 class VOCColorize(object):
     def __init__(self, n=22):
         self.cmap = color_map(22)
-        self.cmap = paddle.to_tensor(self.cmap[:n])
+        self.cmap = self.cmap[:n]
 
     def __call__(self, gray_image):
         size = gray_image.shape
@@ -170,6 +170,7 @@ def show_all(gt, pred):
 
     plt.show()
 
+
 def main():
     """Create the model and start the evaluation process."""
     args = get_arguments()
@@ -185,7 +186,7 @@ def main():
         args.restore_from = pretrianed_models_dict[args.pretrained_model]
 
     saved_state_dict = paddle.load(args.restore_from)
-    model.load_state_dict(saved_state_dict)
+    model.set_state_dict(saved_state_dict)
 
     model.eval()
     # model.cuda(gpu0)
@@ -200,16 +201,16 @@ def main():
     colorize = VOCColorize()
 
     for index, batch in enumerate(testloader):
-        if index % 100 == 0:
+        if index % 1 == 0:
             print('%d processd' % (index))
-        if index == 100:
+        if index == 10:
             break
         image, label, size, name = batch
         size = size[0].numpy()
         # output = model(Variable(image, volatile=True).cuda(gpu0))
         # output = model(Variable(image, volatile=True))
         output = model(image)
-        output = interp(output).cpu().data[0].numpy()
+        output = interp(output).numpy()[0]
 
         output = output[:, :size[0], :size[1]]
         gt = np.asarray(label[0].numpy()[:size[0], :size[1]], dtype=np.int64)

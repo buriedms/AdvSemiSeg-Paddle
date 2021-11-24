@@ -2,10 +2,10 @@ import paddle
 import paddle.nn as nn
 import paddle.nn.functional as F
 
-class CrossEntropy2d(nn.Layer):
+class CrossEntropy2D(nn.Layer):
 
     def __init__(self, ignore_label=255):
-        super(CrossEntropy2d, self).__init__()
+        super(CrossEntropy2D, self).__init__()
         self.ignore_label = ignore_label
 
     def forward(self, predict, target, weight=None):
@@ -33,10 +33,10 @@ class CrossEntropy2d(nn.Layer):
         return loss
 
 
-class BCEWithLogitsLoss2d(nn.Layer):
+class BCEWithLogitsLoss2D(nn.Layer):
 
     def __init__(self, size_average=True, ignore_label=255):
-        super(BCEWithLogitsLoss2d, self).__init__()
+        super(BCEWithLogitsLoss2D, self).__init__()
         self.size_average = size_average
         self.ignore_label = ignore_label
 

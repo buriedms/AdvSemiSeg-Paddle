@@ -26,7 +26,7 @@ from packaging import version
 
 from model.deeplab import Res_Deeplab
 from model.discriminator import FCDiscriminator
-from utils.loss import CrossEntropy2d, BCEWithLogitsLoss2d
+from utils.loss import CrossEntropy2D, BCEWithLogitsLoss2D
 from dataset.voc_dataset import VOCDataSet, VOCGTDataSet
 
 
@@ -52,7 +52,7 @@ NUM_CLASSES = 21
 NUM_STEPS = 20000
 POWER = 0.9
 RANDOM_SEED = 1234
-RESTORE_FROM = 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/resnet101COCO-41f33a49.pdparams'
+RESTORE_FROM = r'./pdparams/resnet101COCO-41f33a49.pdparams'
 SAVE_NUM_IMAGES = 2
 SAVE_PRED_EVERY = 5000
 SNAPSHOT_DIR = './snapshots/'
@@ -162,7 +162,7 @@ def loss_calc(pred, label, gpu):
     # label = Variable(label.long()).cuda(gpu)
     # criterion = CrossEntropy2d().cuda(gpu)
     label = label.long()
-    criterion = CrossEntropy2d()
+    criterion = CrossEntropy2D()
 
     return criterion(pred, label)
 
@@ -173,15 +173,15 @@ def lr_poly(base_lr, iter, max_iter, power):
 
 def adjust_learning_rate(optimizer, i_iter):
     lr = lr_poly(args.learning_rate, i_iter, args.num_steps, args.power)
-    optimizer.param_groups[0]['lr'] = lr
-    if len(optimizer.param_groups) > 1 :
-        optimizer.param_groups[1]['lr'] = lr * 10
+    optimizer._param_groups[0]['lr'] = lr
+    if len(optimizer._param_groups) > 1 :
+        optimizer._param_groups[1]['lr'] = lr * 10
 
 def adjust_learning_rate_D(optimizer, i_iter):
     lr = lr_poly(args.learning_rate_D, i_iter, args.num_steps, args.power)
-    optimizer.param_groups[0]['lr'] = lr
-    if len(optimizer.param_groups) > 1 :
-        optimizer.param_groups[1]['lr'] = lr * 10
+    optimizer._param_groups[0]['lr'] = lr
+    if len(optimizer._param_groups) > 1 :
+        optimizer._param_groups[1]['lr'] = lr * 10
 
 def one_hot(label):
     label = label.numpy()
@@ -221,7 +221,7 @@ def main():
         if name in saved_state_dict and param.size() == saved_state_dict[name].size():
             new_params[name].copy_(saved_state_dict[name])
             print('copy {}'.format(name))
-    model.load_state_dict(new_params)
+    model.set_state_dict(new_params)
 
 
     model.train()
@@ -232,7 +232,7 @@ def main():
     # init D
     model_D = FCDiscriminator(num_classes=args.num_classes)
     if args.restore_from_D is not None:
-        model_D.load_state_dict(paddle.load(args.restore_from_D))
+        model_D.set_state_dict(paddle.load(args.restore_from_D))
     model_D.train()
     # model_D.cuda(args.gpu)
 
@@ -300,10 +300,8 @@ def main():
     optimizer_D. clear_grad()
 
     # loss/ bilinear upsampling
-    bce_loss = BCEWithLogitsLoss2d()
-    interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear')
-
-
+    bce_loss = BCEWithLogitsLoss2D()
+    # interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear')
     interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear', align_corners=True)
 
 
