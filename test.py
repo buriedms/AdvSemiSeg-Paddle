@@ -2,10 +2,12 @@ import paddle
 from tqdm import tqdm
 import numpy as np
 from time import sleep
+import logging
 
 a = np.array([1, 2, 3, 4])
 b = 0.2
 c = a < b
+print(a.size)
 print(c.size)
 print(c)
 print(sum(c))

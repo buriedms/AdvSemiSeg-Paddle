@@ -24,7 +24,6 @@ from dataset.voc_dataset import VOCDataSet, VOCGTDataSet
 import matplotlib.pyplot as plt
 import random
 import timeit
-import logging
 from tqdm import tqdm
 
 start = timeit.default_timer()
@@ -214,12 +213,7 @@ def main():
         args.semi_start=10
         args.save_pred_every=10
 
-
-    logging.basicConfig(
-        filename=os.path.join(args.snapshot_dir, 'train_log.txt'),
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO)
-    logger=logging.getLogger()
+    logger=open(os.path.join(args.snapshot_dir, 'train_log.txt'))
     h, w = map(int, args.input_size.split(','))
     input_size = (h, w)
 
@@ -277,7 +271,7 @@ def main():
         if args.partial_id is not None:
             train_ids = pickle.load(open(args.partial_id))
             print('loading train ids from {}'.format(args.partial_id))
-            logger.info('loading train ids from {}'.format(args.partial_id))
+            logger.write('loading train ids from {}\n'.format(args.partial_id))
         else:
             train_ids = np.arange(train_dataset_size)
             np.random.shuffle(train_ids)
@@ -322,7 +316,7 @@ def main():
     gt_label = 1
     with tqdm(range(args.num_steps)) as t:
         for i_iter in range(args.num_steps):
-            t.set_description('Train : ')
+            t.set_description('Train')
             loss_seg_value = 0
             loss_adv_pred_value = 0
             loss_D_value = 0
@@ -377,12 +371,9 @@ def main():
 
                         semi_gt = pred.numpy().argmax(axis=1)
                         semi_gt[semi_ignore_mask] = 255
-                        print(type(semi_ignore_mask))
-                        print(semi_ignore_mask)
-                        # raise NotImplementedError
-                        semi_ratio = 1.0 - sum(semi_ignore_mask) / semi_ignore_mask.size
-                        print('semi ratio: {:.4f}'.format(semi_ratio))
-                        logger.info('semi ratio: {:.4f}'.format(semi_ratio))
+                        semi_ratio = 1.0 - float(semi_ignore_mask.sum()) / semi_ignore_mask.size
+                        # print('semi ratio: {:.4f}'.format(semi_ratio))
+                        logger.write('semi ratio: {:.4f}\n'.format(semi_ratio))
 
                         if semi_ratio == 0.0:
                             loss_semi_value += 0
@@ -472,9 +463,9 @@ def main():
             #     'iter = {0:8d}/{1:8d}, loss_seg = {2:.3f}, loss_adv_p = {3:.3f}, loss_D = {4:.3f}, loss_semi = {5:.3f}, loss_semi_adv = {6:.3f}'.format(
             #         i_iter, args.num_steps, loss_seg_value, loss_adv_pred_value, loss_D_value, loss_semi_value,
             #         loss_semi_adv_value))
-            logger.info('iter = {0:8d}/{1:8d}, loss_seg = {2:.3f}, loss_adv_p = {3:.3f}, loss_D = {4:.3f}, loss_semi = {5:.3f}, loss_semi_adv = {6:.3f}'.format(
+            logger.write('iter = {0:8d}/{1:8d}, loss_seg = {2:.3f}, loss_adv_p = {3:.3f}, loss_D = {4:.3f}, loss_semi = {5:.3f}, loss_semi_adv = {6:.3f}\n'.format(
                     i_iter, args.num_steps, loss_seg_value, loss_adv_pred_value, loss_D_value, loss_semi_value,loss_semi_adv_value))
-            t.set_postfix(iter = f'{i_iter}/{args.num_steps}', loss_seg = f'{loss_seg_value:.3f}', loss_adv_p = f'{loss_adv_pred_value:.3f}', loss_D = f'{loss_D_value:.3f}', loss_semi = f'{loss_semi_value:.3f}', loss_semi_adv = f'{loss_semi_adv_value:.3f}')
+            t.set_postfix(loss_seg = f'{loss_seg_value:.3f}', loss_adv_p = f'{loss_adv_pred_value:.3f}', loss_D = f'{loss_D_value:.3f}', loss_semi = f'{loss_semi_value:.3f}', loss_semi_adv = f'{loss_semi_adv_value:.3f}')
             if i_iter >= args.num_steps - 1:
                 print('save model ...')
                 paddle.save(model.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(args.num_steps) + '.pdparams'))
