@@ -203,7 +203,7 @@ def make_D_label(label, ignore_mask):
 
     return D_label
 
-def get_iou(data_list, class_num, save_path=None):
+def get_iou(data_list, class_num, logger=None):
     from multiprocessing import Pool
     from utils.metric import ConfusionMatrix
 
@@ -226,35 +226,32 @@ def get_iou(data_list, class_num, save_path=None):
                         'motorbike', 'person', 'pottedplant',
                         'sheep', 'sofa', 'train', 'tvmonitor'))
 
-    # for i, iou in enumerate(j_list):
-    #     print('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]))
-    #
-    # print('meanIOU: ' + str(aveJ) + '\n')
-    if save_path:
-        with open(save_path, 'w') as f:
-            for i, iou in enumerate(j_list):
-                f.write('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]) + '\n')
-            f.write('meanIOU: ' + str(aveJ) + '\n')
+    for i, iou in enumerate(j_list):
+        print('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]))
 
-def test(args,model):
+    print('meanIOU: ' + str(aveJ) + '\n')
+    if logger:
+        for i, iou in enumerate(j_list):
+            logger.write('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]) + '\n')
+        logger.write('meanIOU: ' + str(aveJ) + '\n')
 
-    if not os.path.exists(args.snapshot_dir):
-        os.makedirs(args.snapshot_dir)
-
-    saved_state_dict = paddle.load(args.restore_from)
-    model.set_state_dict(saved_state_dict)
-
+def test(args,model,logger):
     model.eval()
-    # model.cuda(gpu0)
 
+    if args.data_path:
+        val_path=os.path.join(args.data_path,'voc_list/val.txt')
+    else:
+        val_path=args.data_list
     testloader = DataLoader(
-        VOCDataSet(args.data_dir, args.data_list, crop_size=(505, 505), mean=IMG_MEAN, scale=False, mirror=False),
+        VOCDataSet(args.data_dir, val_path, crop_size=(505, 505), mean=IMG_MEAN, scale=False, mirror=False),
         batch_size=1, shuffle=False)
 
     interp = nn.Upsample(size=(505, 505), mode='bilinear', align_corners=True)
     data_list = []
 
     for index, batch in enumerate(testloader):
+        if index+1 % 100 == 0:
+            break
         image, label, size, name = batch
         size = size[0].numpy()
         output = model(image)
@@ -270,8 +267,8 @@ def test(args,model):
         # show_all(gt, output)
         data_list.append([gt.flatten(), output.flatten()])
 
-    filename = os.path.join(args.snapshot_dir, 'train_log.txt')
-    get_iou(data_list, args.num_classes, filename)
+    get_iou(data_list, args.num_classes,logger)
+    model.train()
 
 def main():
     if args.data_path:
@@ -546,6 +543,7 @@ def main():
             print('taking snapshot ...')
             paddle.save(model.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(i_iter) + '.pdparams'))
             paddle.save(model_D.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(i_iter) + '_D.pdparams'))
+            test(args,model,logger)
 
 
     end = timeit.default_timer()

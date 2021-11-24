@@ -25,11 +25,11 @@ IMG_MEAN = np.array((104.00698793, 116.66876762, 122.67891434), dtype=np.float32
 
 MODEL = 'DeepLab'
 DATA_DIRECTORY = './dataset/VOC2012'
-DATA_LIST_PATH = './dataset/voc_list/val.txt'
+DATA_LIST_PATH = './dataset/VOC2012/voc_list/val.txt'
 IGNORE_LABEL = 255
 NUM_CLASSES = 21
 NUM_STEPS = 1449  # Number of images in the validation set.
-RESTORE_FROM = r'./pdparams/AdvSemiSegVOC0.125-8d75b3f1.pdparams'
+RESTORE_FROM = r'D:\Files\GitHub\AdvSemiSeg-Paddle\pdparams\VOC_latest.pdparams'
 # PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
 
@@ -43,6 +43,8 @@ def get_arguments():
     parser = argparse.ArgumentParser(description="VOC evaluation script")
     parser.add_argument("--model", type=str, default=MODEL,
                         help="available options : DeepLab/DRN")
+    parser.add_argument("--data-path", type=str, default=None,
+                        help="Path to the all data.")
     parser.add_argument("--data-dir", type=str, default=DATA_DIRECTORY,
                         help="Path to the directory containing the PASCAL VOC dataset.")
     parser.add_argument("--data-list", type=str, default=DATA_LIST_PATH,
@@ -170,6 +172,10 @@ def main():
     """Create the model and start the evaluation process."""
     args = get_arguments()
 
+    if args.data_path:
+        args.data_dir = args.data_path
+        args.data_list = os.path.join(args.data_path, 'voc_list/train_aug.txt')
+
     gpu0 = args.gpu
 
     if not os.path.exists(args.save_dir):
@@ -192,10 +198,8 @@ def main():
     colorize = VOCColorize()
 
     for index, batch in enumerate(testloader):
-        if index % 1 == 0:
+        if index % 100 == 0:
             print('%d processd' % (index))
-        if index == 10:
-            break
         image, label, size, name = batch
         size = size[0].numpy()
         # output = model(Variable(image, volatile=True).cuda(gpu0))
