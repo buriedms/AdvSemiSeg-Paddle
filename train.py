@@ -87,6 +87,8 @@ def get_arguments():
                         help="Accumulate gradients for ITER_SIZE iterations.")
     parser.add_argument("--num-workers", type=int, default=NUM_WORKERS,
                         help="number of workers for multithread dataloading.")
+    parser.add_argument("--data-path", type=str, default=None,
+                        help="Path to the all data.")
     parser.add_argument("--data-dir", type=str, default=DATA_DIRECTORY,
                         help="Path to the directory containing the PASCAL VOC dataset.")
     parser.add_argument("--data-list", type=str, default=DATA_LIST_PATH,
@@ -154,7 +156,6 @@ def get_arguments():
 
 args = get_arguments()
 
-
 def loss_calc(pred, label, gpu):
     """
     This function returns cross entropy loss for semantic segmentation
@@ -209,6 +210,11 @@ def make_D_label(label, ignore_mask):
 
 
 def main():
+
+    if args.data_path:
+        args.data_dir = args.data_path
+        args.data_list = os.path.join(args.data_path, 'voc_list/train_aug.txt')
+
     h, w = map(int, args.input_size.split(','))
     input_size = (h, w)
 
