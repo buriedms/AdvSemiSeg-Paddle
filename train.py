@@ -24,6 +24,7 @@ from dataset.voc_dataset import VOCDataSet, VOCGTDataSet
 import matplotlib.pyplot as plt
 import random
 import timeit
+import time
 from tqdm import tqdm
 
 start = timeit.default_timer()
@@ -202,6 +203,75 @@ def make_D_label(label, ignore_mask):
 
     return D_label
 
+def get_iou(data_list, class_num, save_path=None):
+    from multiprocessing import Pool
+    from utils.metric import ConfusionMatrix
+
+    ConfM = ConfusionMatrix(class_num)
+    f = ConfM.generateM
+    pool = Pool()
+    m_list = pool.map(f, data_list)
+    pool.close()
+    pool.join()
+
+    for m in m_list:
+        ConfM.addM(m)
+
+    aveJ, j_list, M = ConfM.jaccard()
+
+    classes = np.array(('background',  # always index 0
+                        'aeroplane', 'bicycle', 'bird', 'boat',
+                        'bottle', 'bus', 'car', 'cat', 'chair',
+                        'cow', 'diningtable', 'dog', 'horse',
+                        'motorbike', 'person', 'pottedplant',
+                        'sheep', 'sofa', 'train', 'tvmonitor'))
+
+    # for i, iou in enumerate(j_list):
+    #     print('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]))
+    #
+    # print('meanIOU: ' + str(aveJ) + '\n')
+    if save_path:
+        with open(save_path, 'w') as f:
+            for i, iou in enumerate(j_list):
+                f.write('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]) + '\n')
+            f.write('meanIOU: ' + str(aveJ) + '\n')
+
+def test(args,model):
+
+    if not os.path.exists(args.snapshot_dir):
+        os.makedirs(args.snapshot_dir)
+
+    saved_state_dict = paddle.load(args.restore_from)
+    model.set_state_dict(saved_state_dict)
+
+    model.eval()
+    # model.cuda(gpu0)
+
+    testloader = DataLoader(
+        VOCDataSet(args.data_dir, args.data_list, crop_size=(505, 505), mean=IMG_MEAN, scale=False, mirror=False),
+        batch_size=1, shuffle=False)
+
+    interp = nn.Upsample(size=(505, 505), mode='bilinear', align_corners=True)
+    data_list = []
+
+    for index, batch in enumerate(testloader):
+        image, label, size, name = batch
+        size = size[0].numpy()
+        output = model(image)
+        output = interp(output).numpy()[0]
+
+        output = output[:, :size[0], :size[1]]
+        gt = np.asarray(label[0].numpy()[:size[0], :size[1]], dtype=np.int64)
+
+        output = output.transpose(1, 2, 0)
+        output = np.asarray(np.argmax(output, axis=2), dtype=np.int64)
+
+
+        # show_all(gt, output)
+        data_list.append([gt.flatten(), output.flatten()])
+
+    filename = os.path.join(args.snapshot_dir, 'train_log.txt')
+    get_iou(data_list, args.num_classes, filename)
 
 def main():
     if args.data_path:
@@ -213,7 +283,6 @@ def main():
         args.semi_start=10
         args.save_pred_every=10
 
-    logger=open(os.path.join(args.snapshot_dir, 'train_log.txt'))
     h, w = map(int, args.input_size.split(','))
     input_size = (h, w)
 
@@ -249,6 +318,7 @@ def main():
 
     if not os.path.exists(args.snapshot_dir):
         os.makedirs(args.snapshot_dir)
+    logger = open(os.path.join(args.snapshot_dir, 'train_log.txt'), 'w')
 
     train_dataset = VOCDataSet(args.data_dir, args.data_list, crop_size=input_size,
                                scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
@@ -314,173 +384,172 @@ def main():
     # labels for adversarial training
     pred_label = 0
     gt_label = 1
-    with tqdm(range(args.num_steps)) as t:
-        for i_iter in range(args.num_steps):
-            t.set_description('Train')
-            loss_seg_value = 0
-            loss_adv_pred_value = 0
-            loss_D_value = 0
-            loss_semi_value = 0
-            loss_semi_adv_value = 0
 
-            optimizer.clear_grad()
-            adjust_learning_rate(optimizer, i_iter)
-            optimizer_D.clear_grad()
-            adjust_learning_rate_D(optimizer_D, i_iter)
+    for i_iter in range(args.num_steps):
+        loss_seg_value = 0
+        loss_adv_pred_value = 0
+        loss_D_value = 0
+        loss_semi_value = 0
+        loss_semi_adv_value = 0
 
-            for sub_i in range(args.iter_size):
+        optimizer.clear_grad()
+        adjust_learning_rate(optimizer, i_iter)
+        optimizer_D.clear_grad()
+        adjust_learning_rate_D(optimizer_D, i_iter)
 
-                # train G
+        for sub_i in range(args.iter_size):
 
-                # don't accumulate grads in D
-                for param in model_D.parameters():
-                    param.stop_gradient = True
+            # train G
 
-                # do semi first
-                if (args.lambda_semi > 0 or args.lambda_semi_adv > 0) and i_iter >= args.semi_start_adv:
-                    try:
-                        _, batch = trainloader_remain_iter.__next__()
-                    except:
-                        trainloader_remain_iter = enumerate(trainloader_remain)
-                        _, batch = trainloader_remain_iter.__next__()
+            # don't accumulate grads in D
+            for param in model_D.parameters():
+                param.stop_gradient = True
 
-                    # only access to img
-                    images, _, _, _ = batch
-                    # images = Variable(images).cuda(args.gpu)
-
-                    pred = interp(model(images))
-                    pred_remain = pred.detach()
-
-                    D_out = interp(model_D(F.softmax(pred)))
-                    D_out_sigmoid = F.sigmoid(D_out).numpy().squeeze(axis=1)
-
-                    ignore_mask_remain = np.zeros(D_out_sigmoid.shape).astype(bool)
-
-                    loss_semi_adv = args.lambda_semi_adv * bce_loss(D_out, make_D_label(gt_label, ignore_mask_remain))
-                    loss_semi_adv = loss_semi_adv / args.iter_size
-
-                    # loss_semi_adv.backward()
-                    loss_semi_adv_value += loss_semi_adv.numpy()[0] / args.lambda_semi_adv
-
-                    if args.lambda_semi <= 0 or i_iter < args.semi_start:
-                        loss_semi_adv.backward()
-                        loss_semi_value = 0
-                    else:
-                        # produce ignore mask
-                        semi_ignore_mask = D_out_sigmoid < args.mask_T
-
-                        semi_gt = pred.numpy().argmax(axis=1)
-                        semi_gt[semi_ignore_mask] = 255
-                        semi_ratio = 1.0 - float(semi_ignore_mask.sum()) / semi_ignore_mask.size
-                        # print('semi ratio: {:.4f}'.format(semi_ratio))
-                        logger.write('semi ratio: {:.4f}\n'.format(semi_ratio))
-
-                        if semi_ratio == 0.0:
-                            loss_semi_value += 0
-                        else:
-                            semi_gt = paddle.to_tensor(semi_gt, dtype=paddle.float32)
-
-                            loss_semi = args.lambda_semi * loss_calc(pred, semi_gt, args.gpu)
-                            loss_semi = loss_semi / args.iter_size
-                            loss_semi_value += loss_semi.numpy()[0] / args.lambda_semi
-                            loss_semi += loss_semi_adv
-                            loss_semi.backward()
-
-                else:
-                    loss_semi = None
-                    loss_semi_adv = None
-
-                # train with source
-
+            # do semi first
+            if (args.lambda_semi > 0 or args.lambda_semi_adv > 0) and i_iter >= args.semi_start_adv:
                 try:
-                    _, batch = trainloader_iter.__next__()
+                    _, batch = trainloader_remain_iter.__next__()
                 except:
-                    trainloader_iter = enumerate(trainloader)
-                    _, batch = trainloader_iter.__next__()
+                    trainloader_remain_iter = enumerate(trainloader_remain)
+                    _, batch = trainloader_remain_iter.__next__()
 
-                images, labels, _, _ = batch
+                # only access to img
+                images, _, _, _ = batch
                 # images = Variable(images).cuda(args.gpu)
-                ignore_mask = (labels.numpy() == 255)
+
                 pred = interp(model(images))
-
-                loss_seg = loss_calc(pred, labels, args.gpu)
-
-                D_out = interp(model_D(F.softmax(pred)))
-
-                loss_adv_pred = bce_loss(D_out, make_D_label(gt_label, ignore_mask))
-
-                loss = loss_seg + args.lambda_adv_pred * loss_adv_pred
-
-                # proper normalization
-                loss = loss / args.iter_size
-                loss.backward()
-                loss_seg_value += loss_seg.numpy()[0] / args.iter_size
-                loss_adv_pred_value += loss_adv_pred.numpy()[0] / args.iter_size
-
-                # train D
-
-                # bring back stop_gradient
-                for param in model_D.parameters():
-                    param.stop_gradient = True
-
-                # train with pred
-                pred = pred.detach()
-
-                if args.D_remain:
-                    pred = paddle.concat((pred, pred_remain), 0)
-                    ignore_mask = np.concatenate((ignore_mask, ignore_mask_remain), axis=0)
+                pred_remain = pred.detach()
 
                 D_out = interp(model_D(F.softmax(pred)))
-                loss_D = bce_loss(D_out, make_D_label(pred_label, ignore_mask))
-                loss_D = loss_D / args.iter_size / 2
-                loss_D.backward()
-                loss_D_value += loss_D.numpy()[0]
+                D_out_sigmoid = F.sigmoid(D_out).numpy().squeeze(axis=1)
 
-                # train with gt
-                # get gt labels
-                try:
-                    _, batch = trainloader_gt_iter.__next__()
-                except:
-                    trainloader_gt_iter = enumerate(trainloader_gt)
-                    _, batch = trainloader_gt_iter.__next__()
+                ignore_mask_remain = np.zeros(D_out_sigmoid.shape).astype(bool)
 
-                _, labels_gt, _, _ = batch
-                # D_gt_v = Variable(one_hot(labels_gt)).cuda(args.gpu)
-                D_gt_v = one_hot(labels_gt)
-                ignore_mask_gt = (labels_gt.numpy() == 255)
+                loss_semi_adv = args.lambda_semi_adv * bce_loss(D_out, make_D_label(gt_label, ignore_mask_remain))
+                loss_semi_adv = loss_semi_adv / args.iter_size
 
-                D_out = interp(model_D(D_gt_v))
-                loss_D = bce_loss(D_out, make_D_label(gt_label, ignore_mask_gt))
-                loss_D = loss_D / args.iter_size / 2
-                loss_D.backward()
-                loss_D_value += loss_D.numpy()[0]
+                # loss_semi_adv.backward()
+                loss_semi_adv_value += loss_semi_adv.numpy()[0] / args.lambda_semi_adv
 
-            optimizer.step()
-            optimizer_D.step()
+                if args.lambda_semi <= 0 or i_iter < args.semi_start:
+                    loss_semi_adv.backward()
+                    loss_semi_value = 0
+                else:
+                    # produce ignore mask
+                    semi_ignore_mask = D_out_sigmoid < args.mask_T
 
-            # print('exp = {}'.format(args.snapshot_dir))
-            # print(
-            #     'iter = {0:8d}/{1:8d}, loss_seg = {2:.3f}, loss_adv_p = {3:.3f}, loss_D = {4:.3f}, loss_semi = {5:.3f}, loss_semi_adv = {6:.3f}'.format(
-            #         i_iter, args.num_steps, loss_seg_value, loss_adv_pred_value, loss_D_value, loss_semi_value,
-            #         loss_semi_adv_value))
-            time=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            logger.write(f'{time} - ')
-            logger.write('iter = {0:8d}/{1:8d}, loss_seg = {2:.3f}, loss_adv_p = {3:.3f}, loss_D = {4:.3f}, loss_semi = {5:.3f}, loss_semi_adv = {6:.3f}\n'.format(
-                    i_iter, args.num_steps, loss_seg_value, loss_adv_pred_value, loss_D_value, loss_semi_value,loss_semi_adv_value))
-            t.set_postfix(loss_seg = f'{loss_seg_value:.3f}', loss_adv_p = f'{loss_adv_pred_value:.3f}', loss_D = f'{loss_D_value:.3f}', loss_semi = f'{loss_semi_value:.3f}', loss_semi_adv = f'{loss_semi_adv_value:.3f}')
-            if i_iter >= args.num_steps - 1:
-                print('save model ...')
-                paddle.save(model.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(args.num_steps) + '.pdparams'))
-                paddle.save(model_D.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(args.num_steps) + '_D.pdparams'))
-                break
+                    semi_gt = pred.numpy().argmax(axis=1)
+                    semi_gt[semi_ignore_mask] = 255
+                    semi_ratio = 1.0 - float(semi_ignore_mask.sum()) / semi_ignore_mask.size
+                    # print('semi ratio: {:.4f}'.format(semi_ratio))
+                    logger.write('semi ratio: {:.4f}\n'.format(semi_ratio))
 
-            if i_iter % args.save_pred_every == 0 and i_iter != 0:
-                print('taking snapshot ...')
-                paddle.save(model.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(i_iter) + '.pdparams'))
-                paddle.save(model_D.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(i_iter) + '_D.pdparams'))
-            t.update()
+                    if semi_ratio == 0.0:
+                        loss_semi_value += 0
+                    else:
+                        semi_gt = paddle.to_tensor(semi_gt, dtype=paddle.float32)
+
+                        loss_semi = args.lambda_semi * loss_calc(pred, semi_gt, args.gpu)
+                        loss_semi = loss_semi / args.iter_size
+                        loss_semi_value += loss_semi.numpy()[0] / args.lambda_semi
+                        loss_semi += loss_semi_adv
+                        loss_semi.backward()
+
+            else:
+                loss_semi = None
+                loss_semi_adv = None
+
+            # train with source
+
+            try:
+                _, batch = trainloader_iter.__next__()
+            except:
+                trainloader_iter = enumerate(trainloader)
+                _, batch = trainloader_iter.__next__()
+
+            images, labels, _, _ = batch
+            # images = Variable(images).cuda(args.gpu)
+            ignore_mask = (labels.numpy() == 255)
+            pred = interp(model(images))
+
+            loss_seg = loss_calc(pred, labels, args.gpu)
+
+            D_out = interp(model_D(F.softmax(pred)))
+
+            loss_adv_pred = bce_loss(D_out, make_D_label(gt_label, ignore_mask))
+
+            loss = loss_seg + args.lambda_adv_pred * loss_adv_pred
+
+            # proper normalization
+            loss = loss / args.iter_size
+            loss.backward()
+            loss_seg_value += loss_seg.numpy()[0] / args.iter_size
+            loss_adv_pred_value += loss_adv_pred.numpy()[0] / args.iter_size
+
+            # train D
+
+            # bring back stop_gradient
+            for param in model_D.parameters():
+                param.stop_gradient = True
+
+            # train with pred
+            pred = pred.detach()
+
+            if args.D_remain:
+                pred = paddle.concat((pred, pred_remain), 0)
+                ignore_mask = np.concatenate((ignore_mask, ignore_mask_remain), axis=0)
+
+            D_out = interp(model_D(F.softmax(pred)))
+            loss_D = bce_loss(D_out, make_D_label(pred_label, ignore_mask))
+            loss_D = loss_D / args.iter_size / 2
+            loss_D.backward()
+            loss_D_value += loss_D.numpy()[0]
+
+            # train with gt
+            # get gt labels
+            try:
+                _, batch = trainloader_gt_iter.__next__()
+            except:
+                trainloader_gt_iter = enumerate(trainloader_gt)
+                _, batch = trainloader_gt_iter.__next__()
+
+            _, labels_gt, _, _ = batch
+            # D_gt_v = Variable(one_hot(labels_gt)).cuda(args.gpu)
+            D_gt_v = one_hot(labels_gt)
+            ignore_mask_gt = (labels_gt.numpy() == 255)
+
+            D_out = interp(model_D(D_gt_v))
+            loss_D = bce_loss(D_out, make_D_label(gt_label, ignore_mask_gt))
+            loss_D = loss_D / args.iter_size / 2
+            loss_D.backward()
+            loss_D_value += loss_D.numpy()[0]
+
+        optimizer.step()
+        optimizer_D.step()
+
+        # print('exp = {}'.format(args.snapshot_dir))
+        print(
+            'iter = {0:8d}/{1:8d}, loss_seg = {2:.3f}, loss_adv_p = {3:.3f}, loss_D = {4:.3f}, loss_semi = {5:.3f}, loss_semi_adv = {6:.3f}'.format(
+                i_iter, args.num_steps, loss_seg_value, loss_adv_pred_value, loss_D_value, loss_semi_value,
+                loss_semi_adv_value))
+        time_now=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        logger.write(f'{time_now} - ')
+        logger.write('iter = {0:8d}/{1:8d}, loss_seg = {2:.3f}, loss_adv_p = {3:.3f}, loss_D = {4:.3f}, loss_semi = {5:.3f}, loss_semi_adv = {6:.3f}\n'.format(
+                i_iter, args.num_steps, loss_seg_value, loss_adv_pred_value, loss_D_value, loss_semi_value,loss_semi_adv_value))
+        if i_iter >= args.num_steps - 1:
+            print('save model ...')
+            paddle.save(model.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(args.num_steps) + '.pdparams'))
+            paddle.save(model_D.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(args.num_steps) + '_D.pdparams'))
+            break
+
+        if i_iter % args.save_pred_every == 0 and i_iter != 0:
+            print('taking snapshot ...')
+            paddle.save(model.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(i_iter) + '.pdparams'))
+            paddle.save(model_D.state_dict(), osp.join(args.snapshot_dir, 'VOC_' + str(i_iter) + '_D.pdparams'))
+
 
     end = timeit.default_timer()
+    logger.close()
     print(end - start, 'seconds')
 
 
