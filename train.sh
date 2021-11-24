@@ -4,4 +4,5 @@ python train.py --data-path D:\\Files\\GitHub\\AdvSemiSeg-Paddle\\dataset\\VOC20
                 --partial-data 0.125 \
                 --num-steps 20000 \
                 --lambda-adv-pred 0.01 \
-                --lambda-semi 0.1 --semi-start 5000 --mask-T 0.2
+                --lambda-semi 0.1 --semi-start 5000 --mask-T 0.2 \
+                --debug
