@@ -209,6 +209,12 @@ def main():
         args.data_dir = args.data_path
         args.data_list = os.path.join(args.data_path, 'voc_list/train_aug.txt')
 
+    if args.debug:
+        args.num_steps=100
+        args.semi_start=10
+        args.save_pred_every=10
+
+
     logging.basicConfig(
         filename=os.path.join(args.snapshot_dir, 'train_log.txt'),
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
