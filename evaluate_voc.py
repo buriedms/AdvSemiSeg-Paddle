@@ -30,13 +30,8 @@ IGNORE_LABEL = 255
 NUM_CLASSES = 21
 NUM_STEPS = 1449  # Number of images in the validation set.
 RESTORE_FROM = r'./pdparams/AdvSemiSegVOC0.125-8d75b3f1.pdparams'
-PRETRAINED_MODEL = None
+# PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
-
-pretrianed_models_dict = {'semi0.125': r'./pdparams/AdvSemiSegVOC0.125-03c6f81c.pdparams',
-                          'semi0.25': r'./pdparams/AdvSemiSegVOC0.25-473f8a14.pdparams',
-                          'semi0.5': r'./pdparams/AdvSemiSegVOC0.5-acf6a654.pdparams',
-                          'advFull': r'./pdparams/AdvSegVOCFull-92fbc7ee.pdparams'}
 
 
 def get_arguments():
@@ -58,8 +53,8 @@ def get_arguments():
                         help="Number of classes to predict (including background).")
     parser.add_argument("--restore-from", type=str, default=RESTORE_FROM,
                         help="Where restore model parameters from.")
-    parser.add_argument("--pretrained-model", type=str, default=PRETRAINED_MODEL,
-                        help="Where restore model parameters from.")
+    # parser.add_argument("--pretrained-model", type=str, default=PRETRAINED_MODEL,
+    #                     help="Where restore model parameters from.")
     parser.add_argument("--save-dir", type=str, default=SAVE_DIRECTORY,
                         help="Directory to store results")
     parser.add_argument("--gpu", type=int, default=0,
@@ -181,10 +176,6 @@ def main():
         os.makedirs(args.save_dir)
 
     model = Res_Deeplab(num_classes=args.num_classes)
-
-    if args.pretrained_model != None:
-        args.restore_from = pretrianed_models_dict[args.pretrained_model]
-
     saved_state_dict = paddle.load(args.restore_from)
     model.set_state_dict(saved_state_dict)
 
