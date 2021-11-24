@@ -1,15 +1,6 @@
 import argparse
 import cv2
 import numpy as np
-import pickle
-
-import torch
-# import torch.nn as nn
-from torch.utils import data, model_zoo
-# from torch.autograd import Variable
-# import torch.optim as optim
-# import torch.nn.functional as F
-# import torch.backends.cudnn as cudnn
 
 import paddle
 import paddle.nn as nn
